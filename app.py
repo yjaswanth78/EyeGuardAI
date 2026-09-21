@@ -327,34 +327,37 @@ class CardioSpecialistAgent:
             proc_mask = cv2.resize(sclera_mask, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_NEAREST)
         else:
             proc_img = image_bgr
-            proc_mask = sclera_mask
-            
-        proc_sclera_px = int(np.sum(proc_mask > 0))
-        if proc_sclera_px < 30:
-            proc_mask = sclera_mask
-            proc_img = image_bgr
-            proc_sclera_px = sclera_pixels
+            # Erode sclera mask slightly to eliminate peripheral eyelid/eyelash border shadows
+        kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        clean_mask = cv2.erode(proc_mask, kernel_erode, iterations=1)
+        clean_sclera_px = int(np.sum(clean_mask > 0))
+        if clean_sclera_px > 30:
+            eval_mask = clean_mask
+            eval_px = clean_sclera_px
+        else:
+            eval_mask = proc_mask
+            eval_px = proc_sclera_px
             
         green = proc_img[:, :, 1]
-        k_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        k_med = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+        k_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        k_med = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
         bhat = cv2.max(cv2.morphologyEx(green, cv2.MORPH_BLACKHAT, k_small), cv2.morphologyEx(green, cv2.MORPH_BLACKHAT, k_med))
         
-        bhat_sclera = bhat[proc_mask > 0]
+        bhat_sclera = bhat[eval_mask > 0]
         m_val = float(np.mean(bhat_sclera))
         s_val = float(np.std(bhat_sclera))
-        vessel_thresh = max(18, int(m_val + 1.8 * s_val))
+        vessel_thresh = max(20, int(m_val + 2.0 * s_val))
         
-        vessel_bin = ((bhat > vessel_thresh) & (proc_mask > 0)).astype(np.uint8)
+        vessel_bin = ((bhat > vessel_thresh) & (eval_mask > 0)).astype(np.uint8)
         vessel_px = int(np.sum(vessel_bin > 0))
-        density = (vessel_px / float(proc_sclera_px + 1e-5)) * 100.0
+        density = (vessel_px / float(eval_px + 1e-5)) * 100.0
         
-        # Risk score
-        risk = float(np.clip((density - 3.5) * 15.0, 0.0, 100.0))
+        # Clinical Risk score (Normal physiological baseline is up to 7.5%)
+        risk = float(np.clip((density - 7.5) * 16.0, 0.0, 100.0))
         if risk > 65.0:
             status = f"Elevated Micro-Vessel Density ({density:.2f}%): Prominent scleral vessel engorgement / microvascular strain detected."
             level = "HIGH"
-        elif risk > 30.0:
+        elif risk > 25.0:
             status = f"Borderline Micro-Vascular Density ({density:.2f}%): Mild vessel tortuosity noted; routine blood pressure check advised."
             level = "MODERATE"
         else:
@@ -486,12 +489,12 @@ class ChiefMedicalAgent:
         self.groq_client = None
         self.openai_client = None
         
-        # 1. Initialize Groq (Loaded securely via environment variable)
+        # 1. Initialize Groq (Active 120B Medical LLM Engine via Environment Variable)
         groq_key = os.environ.get("GROQ_API_KEY", "")
         if groq_key:
             try:
                 self.groq_client = Groq(api_key=groq_key)
-                print("Chief Medical Agent: Groq Cloud Engine Activated (groq/compound-mini).")
+                print("Chief Medical Agent: Groq 120B Cloud Engine Activated.")
             except Exception as e:
                 print(f"Groq Init Warning: {e}")
                 
@@ -526,7 +529,7 @@ class ChiefMedicalAgent:
                 "zkp_hash": hashlib.sha256(f"NOT_EYE_{uuid.uuid4()}".encode()).hexdigest()
             }
             
-        pupil_status = "Opacified / Milky (Nuclear Sclerosis)" if cataract_rep["detects_cataract"] else "Clear / Dark Aperture (Normal)"
+        pupil_status = "Opacified / Milky (Nuclear Sclerosis)" if cataract_rep["pupil_opacity_score"] >= 35.0 else "Clear / Transparent Aperture (Normal)"
         agent_logs.append(f"Custom_DualAttnNet: Raw output probability: {cataract_rep['user_model_probability']} -> Prediction: {cataract_rep['user_model_prediction']} (Confidence: {cataract_rep['user_model_confidence']}%).")
         agent_logs.append(f"Agent_LensSpecialist: Optical density analyzed (Pupil Opacity Index: {cataract_rep['pupil_opacity_score']:.1f} -> {pupil_status}).")
         
