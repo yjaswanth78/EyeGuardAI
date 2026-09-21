@@ -475,8 +475,8 @@ class ChiefMedicalAgent:
         self.groq_client = None
         self.openai_client = None
         
-        # 1. Initialize Groq (Verified Working Model: groq/compound-mini)
-        groq_key = "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"
+        # 1. Initialize Groq (Loaded securely via environment variable)
+        groq_key = os.environ.get("GROQ_API_KEY", "")
         if groq_key:
             try:
                 self.groq_client = Groq(api_key=groq_key)
