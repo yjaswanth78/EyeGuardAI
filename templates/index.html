@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EyeGuard AI – Autonomous Agentic Edge Screener</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=5">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo-container">
+                <span class="icon">🤖👁️</span>
+                <h1>EyeGuard Agentic Swarm</h1>
+            </div>
+            <p class="subtitle">100% Offline Edge Multi-Agent Medical Intelligence</p>
+            <span class="badge">Privacy-First (No Internet/API Required)</span>
+        </header>
+
+        <div class="progress-bar">
+            <div class="step active" id="step1">1. Capture</div>
+            <div class="step" id="step2">2. Swarm Debate</div>
+            <div class="step" id="step3">3. Final Consensus</div>
+        </div>
+
+        <main>
+            <!-- ERROR ALERT -->
+            <div id="error-alert" class="alert error hidden">
+                <span class="alert-icon">⚠️</span>
+                <span id="error-text">An error occurred.</span>
+            </div>
+
+            <!-- INPUT SECTION -->
+            <section id="input-section" class="card">
+                <p class="privacy-notice">Upload or capture an eye image. Our autonomous edge swarm will evaluate it entirely offline.</p>
+
+                <div class="action-buttons">
+                    <button id="btn-camera" class="btn primary">
+                        <span>📸</span> Take Photo
+                    </button>
+                    <div class="upload-wrapper">
+                        <button class="btn secondary" onclick="document.getElementById('file-upload').click()">
+                            <span>📁</span> Upload Image
+                        </button>
+                        <input type="file" id="file-upload" accept="image/*" hidden>
+                        <input type="file" id="camera-capture-input" accept="image/*" capture="environment" hidden>
+                    </div>
+                </div>
+
+                <!-- QUICK TEST SAMPLE BUTTONS -->
+                <div class="sample-images-section" style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #e5e7eb; text-align: center;">
+                    <p style="font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:10px;">⚡ Quick Swarm Tests (Eye Crops & Full Faces):</p>
+                    <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+                        <button type="button" class="sample-btn" data-img="/static/test_images/1_normal_eye.jpg">👁️ Normal Eye</button>
+                        <button type="button" class="sample-btn" data-img="/static/test_images/2_cataract_eye.jpg">⚠️ Cataract Eye</button>
+                        <button type="button" class="sample-btn" data-img="/static/test_images/3_red_eye.jpg">🩺 Red Eye</button>
+                        <button type="button" class="sample-btn" data-img="/static/test_images/5_person_female_face.jpg">👤 Full Face (Female)</button>
+                        <button type="button" class="sample-btn" data-img="/static/test_images/6_person_male_face.jpg">👤 Full Face (Male)</button>
+                        <button type="button" class="sample-btn" data-img="/static/test_images/7_person_elderly_face.jpg">👤 Full Face (Elderly)</button>
+                        <button type="button" class="sample-btn" data-img="/static/test_images/4_green_mug_non_eye.jpg">☕ Non-Eye Object</button>
+                    </div>
+                </div>
+
+                <!-- Camera View -->
+                <div id="camera-view" class="hidden">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas" hidden></canvas>
+                    <div class="camera-controls">
+                        <button id="btn-capture" class="btn primary">Capture</button>
+                        <button id="btn-cancel-camera" class="btn secondary">Cancel</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- LOADING SPINNER -->
+            <div id="loading-spinner" class="hidden text-center my-4">
+                <div class="spinner"></div>
+                <p id="loading-text">Agent Swarm Analyzing Data...</p>
+            </div>
+
+            <!-- RESULT SECTION -->
+            <section id="result-section" class="card hidden">
+                <div id="result-card" class="result-banner">
+                    <div class="result-header">
+                        <span id="result-icon" class="large-icon"></span>
+                        <h2 id="result-title">Chief Agent Consensus</h2>
+                    </div>
+                    
+                    <div class="metrics-grid">
+                        <div class="metric-box">
+                            <span class="metric-label">Execution Mode</span>
+                            <span class="metric-value" style="font-size:0.9rem;">100% Offline</span>
+                        </div>
+                        <div class="metric-box" id="confidence-box">
+                            <span class="metric-label">Swarm Confidence</span>
+                            <span id="result-confidence" class="metric-value"></span>
+                        </div>
+                    </div>
+
+                    <!-- MULTI-MODEL COLLABORATIVE DIAGNOSIS (YOUR MODEL + AI SWARM + MERGED CONSENSUS) -->
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin: 15px 0; text-align:left;">
+                        <!-- 1. USER'S TRAINED DUALATTN-NET MODEL -->
+                        <div style="background:#eef2ff; border:1px solid #c7d2fe; padding:12px; border-radius:8px; display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-size:0.75rem; font-weight:700; color:#4338ca; text-transform:uppercase;">🔬 1. Your Model</span>
+                                    <span id="user-model-badge" style="background:#4338ca; color:#fff; font-size:0.65rem; font-weight:600; padding:2px 6px; border-radius:10px;">Active</span>
+                                </div>
+                                <div style="font-weight:700; font-size:1.0rem; color:#1e1b4b;" id="user-model-prediction">Normal Eye</div>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#4f46e5; margin-top:6px; border-top:1px dashed #c7d2fe; padding-top:4px;">
+                                <span>Prob: <strong id="user-model-prob">0.0%</strong></span>
+                                <span>Conf: <strong id="user-model-conf">99.0%</strong></span>
+                            </div>
+                        </div>
+
+                        <!-- 2. AI MULTI-AGENT SWARM RESULT -->
+                        <div style="background:#f0fdf4; border:1px solid #bbf7d0; padding:12px; border-radius:8px; display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-size:0.75rem; font-weight:700; color:#15803d; text-transform:uppercase;">🤖 2. AI Swarm</span>
+                                    <span id="ai-swarm-badge" style="background:#16a34a; color:#fff; font-size:0.65rem; font-weight:600; padding:2px 6px; border-radius:10px;">Multi-Agent</span>
+                                </div>
+                                <div style="font-weight:700; font-size:1.0rem; color:#14532d;" id="ai-swarm-finding">Healthy Anatomy</div>
+                            </div>
+                            <div style="font-size:0.72rem; color:#166534; margin-top:6px; border-top:1px dashed #bbf7d0; padding-top:4px;" id="ai-swarm-metrics">
+                                Pupil: <strong id="ai-pupil-score">0.0</strong> | Sclera: <strong id="ai-vasc-score">0.0%</strong>
+                            </div>
+                        </div>
+
+                        <!-- 3. MERGED FINAL CONSENSUS -->
+                        <div style="background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px; display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-size:0.75rem; font-weight:700; color:#a16207; text-transform:uppercase;">⭐ 3. Merged Verdict</span>
+                                    <span id="merged-verdict-badge" style="background:#ca8a04; color:#fff; font-size:0.65rem; font-weight:600; padding:2px 6px; border-radius:10px;">Consensus</span>
+                                </div>
+                                <div style="font-weight:700; font-size:1.0rem; color:#713f12;" id="merged-verdict-title">No Disease (Healthy)</div>
+                            </div>
+                            <div style="font-size:0.72rem; color:#854d0e; margin-top:6px; border-top:1px dashed #fef08a; padding-top:4px;" id="merged-verdict-summary">
+                                100% agreement: No pathology detected.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="agent-logs-container" style="background:#1f2937; color:#34d399; padding:12px; border-radius:6px; margin: 15px 0; font-family: monospace; font-size: 0.8rem; text-align:left;">
+                        <div style="color:#9ca3af; margin-bottom:5px; border-bottom:1px solid #374151; padding-bottom:3px;">> LIVE SWARM COMMUNICATIONS</div>
+                        <ul id="agent-logs-list" style="list-style: none; padding:0; margin:0; line-height: 1.6;">
+                        </ul>
+                    </div>
+                    
+                    <!-- OCULOMICS SYSTEMIC BIOMARKER AGENTS (LIVER, BLOOD, CARDIAC) -->
+                    <div class="oculomics-card" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:15px; margin: 15px 0; text-align:left;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+                            <span style="font-size:0.8rem; font-weight:700; color:#0f172a; text-transform:uppercase; letter-spacing:0.05em;">🌐 Oculomics Autonomous Swarm (Tri-Biomarker Screen)</span>
+                            <span style="background:#0284c7; color:#fff; font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius:10px;">Offline Edge</span>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+                            <!-- 🟡 LIVER SPECIALIST AGENT -->
+                            <div style="background:#fff; border:1px solid #fef08a; border-radius:8px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <span style="font-weight:700; font-size:0.85rem; color:#854d0e;">🟡 Liver Specialist</span>
+                                    <span id="oculomics-liver-badge" style="font-size:0.7rem; font-weight:700; padding:2px 6px; border-radius:6px; background:#fef9c3; color:#a16207;">NORMAL</span>
+                                </div>
+                                <div style="font-size:0.75rem; color:#64748b; margin-bottom:2px;">Target: <strong>Sclera (White Part)</strong></div>
+                                <div style="font-size:0.75rem; color:#64748b; margin-bottom:6px;">Biomarker: <strong>Microscopic Icterus (Yellowing)</strong></div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:600; color:#1e293b; background:#fefce8; padding:6px 8px; border-radius:6px;">
+                                    <span>Yellow Index: <strong id="oculomics-liver-syi" style="color:#ca8a04;">1.00</strong></span>
+                                    <span>Jaundice Risk: <strong id="oculomics-liver-risk" style="color:#ca8a04;">0.0%</strong></span>
+                                </div>
+                                <p id="oculomics-liver-desc" style="font-size:0.72rem; color:#64748b; margin-top:6px; line-height:1.3;">Healthy Scleral Chromaticity (Normal Bilirubin Baseline)</p>
+                            </div>
+
+                            <!-- 🩸 BLOOD SPECIALIST AGENT -->
+                            <div style="background:#fff; border:1px solid #fecdd3; border-radius:8px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <span style="font-weight:700; font-size:0.85rem; color:#9f1239;">🩸 Blood Specialist</span>
+                                    <span id="oculomics-blood-badge" style="font-size:0.7rem; font-weight:700; padding:2px 6px; border-radius:6px; background:#ffe4e6; color:#be123c;">NORMAL</span>
+                                </div>
+                                <div style="font-size:0.75rem; color:#64748b; margin-bottom:2px;">Target: <strong>Inner Eyelid & Eye Skin</strong></div>
+                                <div style="font-size:0.75rem; color:#64748b; margin-bottom:6px;">Biomarker: <strong>Tissue Pallor & Erythema Ratio</strong></div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:600; color:#1e293b; background:#fff1f2; padding:6px 8px; border-radius:6px;">
+                                    <span>Pallor Score: <strong id="oculomics-blood-pallor" style="color:#e11d48;">0.0</strong></span>
+                                    <span>Anemia Risk: <strong id="oculomics-blood-risk" style="color:#e11d48;">0.0%</strong></span>
+                                </div>
+                                <p id="oculomics-blood-desc" style="font-size:0.72rem; color:#64748b; margin-top:6px; line-height:1.3;">Healthy Tissue Perfusion (Normal Hemoglobin Baseline)</p>
+                            </div>
+
+                            <!-- 🫀 CARDIAC SPECIALIST AGENT -->
+                            <div style="background:#fff; border:1px solid #fed7aa; border-radius:8px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <span style="font-weight:700; font-size:0.85rem; color:#9a3412;">🫀 Cardiac Specialist</span>
+                                    <span id="oculomics-cardio-badge" style="font-size:0.7rem; font-weight:700; padding:2px 6px; border-radius:6px; background:#ffedd5; color:#c2410c;">NORMAL</span>
+                                </div>
+                                <div style="font-size:0.75rem; color:#64748b; margin-bottom:2px;">Target: <strong>Scleral Micro-Vessels</strong></div>
+                                <div style="font-size:0.75rem; color:#64748b; margin-bottom:6px;">Biomarker: <strong>Vascular Caliber & Density</strong></div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:600; color:#1e293b; background:#fff7ed; padding:6px 8px; border-radius:6px;">
+                                    <span>Vessel Density: <strong id="oculomics-cardio-density" style="color:#ea580c;">0.0%</strong></span>
+                                    <span>Cardio Risk: <strong id="oculomics-cardio-risk" style="color:#ea580c;">0.0%</strong></span>
+                                </div>
+                                <p id="oculomics-cardio-desc" style="font-size:0.72rem; color:#64748b; margin-top:6px; line-height:1.3;">Normal Micro-Vascular Baseline (Healthy Caliber)</p>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:12px; padding-top:8px; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                            <span style="font-size:0.75rem; color:var(--text-color);"><strong>🔒 ZKP Cryptographic Hash:</strong></span>
+                            <span id="zkp-hash" style="font-family:monospace; color:var(--primary); word-break:break-all; font-size:0.72rem;">N/A</span>
+                        </div>
+                    </div>
+
+                    <div class="advice-box" style="margin-top:15px; border-left: 4px solid var(--primary); padding-left: 10px;">
+                        <p id="result-advice"></p>
+                    </div>
+
+                    <p class="disclaimer" id="result-disclaimer"></p>
+
+                    <div class="action-buttons result-actions">
+                        <button id="btn-reset" class="btn primary">Deploy Swarm Again</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- HISTORY SECTION -->
+            <section id="history-section" class="card">
+                <h3>Swarm Diagnosis History</h3>
+                <div id="history-list"></div>
+                <button id="btn-clear-history" class="btn text-btn hidden">Clear History</button>
+            </section>
+        </main>
+    </div>
+    <!-- App Script with Cache Buster -->
+    <script src="{{ url_for('static', filename='js/app.js') }}?v=11"></script>
+</body>
+</html>
