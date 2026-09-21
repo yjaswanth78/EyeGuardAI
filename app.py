@@ -573,10 +573,10 @@ Respond ONLY in format: CATEGORY|TITLE|CONFIDENCE. No other text.
         # Try Groq first
         if self.groq_client:
             try:
-                agent_logs.append("Chief_Agent: Pinging Groq Agentic LLM for cloud peer-review...")
+                agent_logs.append("Chief_Agent: Pinging Groq 120B Agentic LLM for cloud peer-review...")
                 completion = self.groq_client.chat.completions.create(
                     messages=[{"role": "user", "content": prompt}],
-                    model="groq/compound-mini",
+                    model="openai/gpt-oss-120b",
                     temperature=0.0,
                     max_tokens=60
                 )
