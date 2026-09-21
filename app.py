@@ -12,10 +12,16 @@ import cv2
 import numpy as np
 from flask import Flask, request, jsonify, render_template
 import uuid
-import traceback
-import tensorflow as tf
-
-app = Flask(__name__)
+try:
+    from ai_edge_litert.interpreter import Interpreter as TFLiteInterpreter
+except ImportError:
+    try:
+        from tflite_runtime.interpreter import Interpreter as TFLiteInterpreter
+    except ImportError:
+        try:
+            from tensorflow.lite.python.interpreter import Interpreter as TFLiteInterpreter
+        except ImportError:
+            TFLiteInterpreter = None
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -113,11 +119,14 @@ class CataractSpecialistAgent:
         self.interpreter = None
         if os.path.exists(model_path):
             try:
-                self.interpreter = tf.lite.Interpreter(model_path=model_path)
-                self.interpreter.allocate_tensors()
-                self.input_details = self.interpreter.get_input_details()
-                self.output_details = self.interpreter.get_output_details()
-                print("Lens Specialist: Custom DualAttn-Net TFLite Model Loaded Successfully.")
+                if TFLiteInterpreter is not None:
+                    self.interpreter = TFLiteInterpreter(model_path=model_path)
+                    self.interpreter.allocate_tensors()
+                    self.input_details = self.interpreter.get_input_details()
+                    self.output_details = self.interpreter.get_output_details()
+                    print("Lens Specialist: Custom DualAttn-Net TFLite Model Loaded Successfully.")
+                else:
+                    print("Lens Specialist: TFLite interpreter unavailable, using optical fallback.")
             except Exception as e:
                 print(f"Model load error: {e}")
                 
