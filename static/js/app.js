@@ -377,11 +377,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. Blood Specialist
             const blood = data.oculomics.blood;
             if (blood && typeof blood === 'object') {
+                const erythemaEl = document.getElementById('oculomics-blood-erythema');
                 const pallorEl = document.getElementById('oculomics-blood-pallor');
                 const riskEl = document.getElementById('oculomics-blood-risk');
                 const badgeEl = document.getElementById('oculomics-blood-badge');
                 const descEl = document.getElementById('oculomics-blood-desc');
                 
+                if (erythemaEl) erythemaEl.textContent = blood.erythema_ratio !== undefined ? Number(blood.erythema_ratio).toFixed(2) : "1.40";
                 if (pallorEl) pallorEl.textContent = blood.pallor_score !== undefined ? Number(blood.pallor_score).toFixed(1) : "0.0";
                 if (riskEl) riskEl.textContent = `${blood.anemia_risk !== undefined ? Number(blood.anemia_risk).toFixed(1) : "0.0"}%`;
                 if (descEl) descEl.textContent = blood.status || "Healthy Tissue Perfusion";
