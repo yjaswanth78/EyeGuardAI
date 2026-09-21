@@ -210,13 +210,13 @@ class LiverSpecialistAgent:
         jaundice_risk = float(np.clip((yellow_index - 1.16) * 90.0, 0.0, 100.0))
         
         if jaundice_risk > 60.0:
-            status = "Elevated Scleral Icterus (Jaundice / Liver Risk Detected)"
+            status = f"Elevated Scleral Icterus (SYI: {yellow_index:.2f}): Yellowing indicates possible systemic bilirubin accumulation."
             level = "HIGH"
         elif jaundice_risk > 30.0:
-            status = "Borderline Scleral Yellowing (Mild Icterus Indicator)"
+            status = f"Borderline Scleral Chromaticity (SYI: {yellow_index:.2f}): Mild yellowing observed; re-screen recommended."
             level = "MODERATE"
         else:
-            status = "Healthy Scleral Chromaticity (Normal Bilirubin Baseline)"
+            status = f"Physiological Chromaticity (SYI: {yellow_index:.2f}): Normal bilirubin clearance with unpigmented sclera."
             level = "NORMAL"
             
         return {
@@ -276,13 +276,13 @@ class BloodSpecialistAgent:
         anemia_risk = float(np.clip((pallor_score - 18.0) * 1.5, 0.0, 100.0))
         
         if anemia_risk > 60.0:
-            status = "Significant Tissue Pallor (Non-Invasive Anemia Risk Detected)"
+            status = f"Significant Tissue Pallor (Pallor: {pallor_score:.1f}): Blanched conjunctiva indicates possible hemoglobin depletion / anemia."
             level = "HIGH"
         elif anemia_risk > 30.0:
-            status = "Mild Palpebral Pallor (Borderline Iron Deficiency Screen)"
+            status = f"Mild Palpebral Pallor (Pallor: {pallor_score:.1f}): Borderline erythema ({erythema_ratio:.2f}); iron profile check suggested."
             level = "MODERATE"
         else:
-            status = "Healthy Tissue Perfusion (Normal Hemoglobin Baseline)"
+            status = f"Vascular Perfusion Optimal (Erythema: {erythema_ratio:.2f}): Healthy capillary flush without palpebral pallor."
             level = "NORMAL"
             
         return {
@@ -352,13 +352,13 @@ class CardioSpecialistAgent:
         # Risk score
         risk = float(np.clip((density - 3.5) * 15.0, 0.0, 100.0))
         if risk > 65.0:
-            status = "Elevated Micro-Vascular Density (Hypertension Risk Flagged)"
+            status = f"Elevated Micro-Vessel Density ({density:.2f}%): Prominent scleral vessel engorgement / microvascular strain detected."
             level = "HIGH"
         elif risk > 30.0:
-            status = "Moderate Micro-Vascular Caliber (Borderline Vascular Strain)"
+            status = f"Borderline Micro-Vascular Density ({density:.2f}%): Mild vessel tortuosity noted; routine blood pressure check advised."
             level = "MODERATE"
         else:
-            status = "Normal Micro-Vascular Baseline (Healthy Caliber)"
+            status = f"Physiological Micro-Circulation ({density:.2f}%): Normal capillary density and healthy vessel caliber."
             level = "NORMAL"
             
         return {
@@ -559,69 +559,93 @@ class ChiefMedicalAgent:
             clinical_title = "No Disease Detected (Healthy Eye)"
             clinical_conf = max(cataract_rep["user_model_confidence"], 94.0)
 
-        # Attempt Peer-Review via Cloud LLM
+        # Attempt Peer-Review via Cloud 120B Agentic LLM
         llm_resolved = False
-        prompt = f"""
-You are the Chief Medical Officer of an Autonomous Multi-Agent Ophthalmic Swarm.
-Review telemetry from the edge specialist agents:
-- Custom DualAttnNet Neural Model: {cataract_rep['user_model_prediction']} (Raw Prob: {cataract_rep['user_model_probability']}, Confidence: {cataract_rep['user_model_confidence']}%)
-- Sclera Anatomy Coverage: {inflamm_rep['sclera_ratio']}% (Normal: >=1.0%)
-- Scleral Redness / Hyperemia: {inflamm_rep['redness_ratio']:.2f}% (Normal: < 10.0%, Acute Hyperemia: >= 13.0%)
-- Pupil Opacity Score: {cataract_rep['pupil_opacity_score']:.1f} (Clear dark aperture if < 25.0, Cloudy if >= 35.0)
-- Micro-Vessel Density: {cardio_rep['vascular_density']}% (Normal: < 5.0%, Elevated: >= 6.0%)
-- Liver Jaundice Status: {liver_rep['status']} (SYI: {liver_rep['yellow_index']})
-- Blood Pallor Status: {blood_rep['status']} (Pallor: {blood_rep['pallor_score']})
-- Cardio Vascular Status: {cardio_rep['status']}
+        dynamic_summary = None
+        dynamic_advice = None
+        
+        sys_prompt = """You are an expert board-certified Ophthalmologist and AI Clinical Ocular Specialist.
+Given clinical eye measurements, provide a genuine, unique, patient-specific diagnostic report.
+Do NOT give generic copy-paste text.
+Evaluate the specific values:
+- Pupil transparency vs nuclear lens sclerosis (cataract if opacity >= 35.0)
+- Sclera redness / conjunctival vascularity (conjunctivitis if redness >= 13.0% or redness >= 7% with high vessel density)
+- Scleral yellow index (icterus / liver metabolism if >= 1.20)
+- Erythema ratio & pallor score (perfusion & hemoglobin / anemia)
+- Micro-vessel density (ocular cardiovascular caliber)
 
-Synthesize and confirm clinical consensus:
-1. If Sclera Anatomy Coverage < 1.0%: reply NOT_EYE|Anomaly / No Eye Detected|99.0
-2. Else if Scleral Redness >= 13.0% or (Scleral Redness >= 7.0% and Micro-Vessel Density >= 6.0%): reply CONJUNCTIVITIS|Conjunctivitis Detected (Acute Scleral Hyperemia)|96.5
-3. Else if Pupil Opacity Score >= 35.0: reply CATARACT|Cataract Detected (Lens Clouding)|94.0
-4. Else: reply NORMAL|No Disease Detected (Healthy Eye)|95.0
+Return valid JSON with:
+{
+  "diagnosis_category": "NORMAL" or "CATARACT" or "CONJUNCTIVITIS" or "NOT_EYE",
+  "diagnosis_title": "Specific Medical Diagnostic Title",
+  "confidence": 95.0,
+  "clinical_summary": "2-3 sentences of personalized medical analysis specifically detailing this patient's ocular anatomy and biomarker readings",
+  "personalized_advice": "Actionable, customized patient guidance and lifestyle recommendations tailored to these findings"
+}"""
 
-Respond ONLY in format: CATEGORY|TITLE|CONFIDENCE. No other text.
-"""
-        # Try Groq first
+        user_prompt = f"""Patient Telemetry:
+- Custom DualAttnNet Neural Prediction: {cataract_rep['user_model_prediction']} (Prob: {cataract_rep['user_model_probability']}, Conf: {cataract_rep['user_model_confidence']}%)
+- Pupil Opacity Score: {cataract_rep['pupil_opacity_score']:.1f} (Normal <25, Opacified lens >=35)
+- Sclera Coverage: {inflamm_rep['sclera_ratio']:.1f}% (Valid ocular anatomy >=1.0%)
+- Scleral Redness / Hyperemia: {inflamm_rep['redness_ratio']:.2f}% (Normal <7.0%, Inflamed >=13.0%)
+- Scleral Yellow Index (SYI): {liver_rep['yellow_index']:.2f} (Normal 0.95-1.16, Icterus >=1.20)
+- Erythema Ratio: {blood_rep.get('erythema_ratio', 1.40):.2f} (Normal >1.25)
+- Pallor Score: {blood_rep['pallor_score']:.1f} (Normal <30, Anemia risk >=50)
+- Scleral Micro-Vessel Density: {cardio_rep['vascular_density']:.2f}% (Normal <5.0%, Hypertension risk >=6.0%)"""
+
+        # Try Groq first with 120B model
         if self.groq_client:
             try:
-                agent_logs.append("Chief_Agent: Pinging Groq 120B Agentic LLM for cloud peer-review...")
+                agent_logs.append("Chief_Agent: Consulting Groq 120B Agentic LLM for comprehensive clinical synthesis...")
                 completion = self.groq_client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
                     model="openai/gpt-oss-120b",
-                    temperature=0.0,
-                    max_tokens=60
+                    response_format={"type": "json_object"},
+                    temperature=0.3
                 )
-                resp = completion.choices[0].message.content.strip()
-                if "|" in resp:
-                    parts = resp.split("|")
-                    clinical_cat = parts[0].strip()
-                    clinical_title = parts[1].strip()
-                    try: clinical_conf = float(parts[2].strip())
-                    except: pass
-                    agent_logs.append(f"Chief_Agent: Groq Cloud Engine peer-reviewed & confirmed -> {clinical_cat}.")
-                    llm_resolved = True
+                raw_json = completion.choices[0].message.content.strip()
+                import json
+                ai_data = json.loads(raw_json)
+                
+                clinical_cat = ai_data.get("diagnosis_category", clinical_cat).strip().upper()
+                clinical_title = ai_data.get("diagnosis_title", clinical_title).strip()
+                try: clinical_conf = float(ai_data.get("confidence", clinical_conf))
+                except: pass
+                
+                dynamic_summary = ai_data.get("clinical_summary")
+                dynamic_advice = ai_data.get("personalized_advice")
+                
+                agent_logs.append(f"Chief_Agent: Groq 120B LLM synthesized clinical consensus -> {clinical_cat} ({clinical_title}).")
+                llm_resolved = True
             except Exception as e:
-                agent_logs.append(f"Chief_Agent: Groq bypassed ({e}). Engaging Edge consensus.")
+                agent_logs.append(f"Chief_Agent: Groq 120B fallback engaged ({e}).")
                 
         # Try OpenAI if Groq didn't resolve
         if not llm_resolved and self.openai_client:
             try:
                 agent_logs.append("Chief_Agent: Pinging OpenAI Engine for consensus verification...")
                 completion = self.openai_client.chat.completions.create(
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
                     model="gpt-4o-mini",
-                    temperature=0.0,
-                    max_tokens=60
+                    response_format={"type": "json_object"},
+                    temperature=0.3
                 )
-                resp = completion.choices[0].message.content.strip()
-                if "|" in resp:
-                    parts = resp.split("|")
-                    clinical_cat = parts[0].strip()
-                    clinical_title = parts[1].strip()
-                    try: clinical_conf = float(parts[2].strip())
-                    except: pass
-                    agent_logs.append(f"Chief_Agent: OpenAI Engine peer-reviewed & confirmed -> {clinical_cat}.")
-                    llm_resolved = True
+                import json
+                ai_data = json.loads(completion.choices[0].message.content.strip())
+                clinical_cat = ai_data.get("diagnosis_category", clinical_cat).strip().upper()
+                clinical_title = ai_data.get("diagnosis_title", clinical_title).strip()
+                try: clinical_conf = float(ai_data.get("confidence", clinical_conf))
+                except: pass
+                dynamic_summary = ai_data.get("clinical_summary")
+                dynamic_advice = ai_data.get("personalized_advice")
+                agent_logs.append(f"Chief_Agent: OpenAI Engine peer-reviewed & confirmed -> {clinical_cat}.")
+                llm_resolved = True
             except Exception as e:
                 pass
 
@@ -632,39 +656,47 @@ Respond ONLY in format: CATEGORY|TITLE|CONFIDENCE. No other text.
         cat_upper = clinical_cat.upper()
         if "CONJUNCT" in cat_upper:
             clinical_cat = "CONJUNCTIVITIS"
-            clinical_title = "Conjunctivitis Detected (Acute Scleral Hyperemia)"
+            if not clinical_title or "Detected" not in clinical_title:
+                clinical_title = "Conjunctivitis Detected (Acute Scleral Hyperemia)"
         elif "CATARACT" in cat_upper:
             clinical_cat = "CATARACT"
-            clinical_title = "Cataract Detected (Lens Clouding)"
+            if not clinical_title or "Detected" not in clinical_title:
+                clinical_title = "Cataract Detected (Lens Clouding)"
         elif "NOT_EYE" in cat_upper or "ANOMALY" in cat_upper:
             clinical_cat = "NOT_EYE"
             clinical_title = "Anomaly / No Eye Detected"
         else:
             clinical_cat = "NORMAL"
-            clinical_title = "No Disease Detected (Healthy Eye)"
+            if not clinical_title or "Detected" not in clinical_title:
+                clinical_title = "No Disease Detected (Healthy Eye)"
 
         # Synchronize AI Swarm Finding & Merged Summary with Final Clinical Category
         is_model_overruled = (cataract_rep["detects_cataract"] and clinical_cat == "NORMAL")
         if clinical_cat == "NOT_EYE":
             ai_finding = "Non-Eye / Out-of-Distribution"
-            merged_summary = "No recognized ocular structures detected in image."
+            merged_summary = dynamic_summary or "No recognized ocular structures detected in image."
         elif clinical_cat == "CONJUNCTIVITIS":
             ai_finding = "Conjunctivitis / Scleral Hyperemia"
-            merged_summary = f"Ocular Hyperemia Detected: Scleral redness ({inflamm_rep['redness_ratio']:.1f}%) and micro-vessel dilation indicate active conjunctival inflammation."
+            merged_summary = dynamic_summary or f"Ocular Hyperemia Detected: Scleral redness ({inflamm_rep['redness_ratio']:.1f}%) indicates active conjunctival inflammation."
         elif clinical_cat == "CATARACT":
             ai_finding = "Cataract (Lens Opacification)"
-            merged_summary = f"Cataract Confirmed: Optical lens opacity index ({cataract_rep['pupil_opacity_score']:.1f}) demonstrates clinically significant nuclear opacification."
+            merged_summary = dynamic_summary or f"Cataract Confirmed: Optical lens opacity index ({cataract_rep['pupil_opacity_score']:.1f}) demonstrates clinically significant nuclear opacification."
         else:
             ai_finding = "Healthy Ocular Anatomy (No Disease)"
-            if is_model_overruled:
+            if dynamic_summary:
+                merged_summary = dynamic_summary
+            elif is_model_overruled:
                 merged_summary = f"Healthy Normal Baseline: DualAttn-Net flagged high sensitivity ({cataract_rep['user_model_probability']}), but Swarm optical inspection verified transparent pupil aperture and uninflamed sclera. False cataract overruled."
             else:
                 merged_summary = "Healthy Normal Baseline: Clear pupil aperture, uninflamed sclera, and normal vascular microcirculation."
 
-        # Generate Clinical RAG Report
-        rag_key = "CATARACT" if clinical_cat == "CATARACT" else ("CONJUNCTIVITIS" if clinical_cat == "CONJUNCTIVITIS" else "NORMAL")
-        rag_report = rag_agent.generate_report(rag_key, cataract_rep["model_probability"])
-        advice = f"{rag_report['medical_insight']} Forecast: {rag_report['forecast']} (Ref: {rag_report['rag_reference']})"
+        # Patient Advice: Use unique dynamic AI advice if available, else RAG
+        if dynamic_advice:
+            advice = dynamic_advice
+        else:
+            rag_key = "CATARACT" if clinical_cat == "CATARACT" else ("CONJUNCTIVITIS" if clinical_cat == "CONJUNCTIVITIS" else "NORMAL")
+            rag_report = rag_agent.generate_report(rag_key, cataract_rep["model_probability"])
+            advice = f"{rag_report['medical_insight']} Forecast: {rag_report['forecast']} (Ref: {rag_report['rag_reference']})"
         
         # Append Oculomics Flags if abnormal
         oculomics_alerts = []
