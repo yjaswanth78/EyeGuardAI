@@ -10,7 +10,7 @@ if hasattr(sys.stderr, 'buffer'):
 import os
 import cv2
 import numpy as np
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 import uuid
 try:
     from ai_edge_litert.interpreter import Interpreter as TFLiteInterpreter
@@ -837,6 +837,80 @@ def predict():
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/uploads/history/<path:filename>')
+def serve_history_image(filename):
+    """Allows viewing uploaded images directly in the browser."""
+    history_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'history')
+    return send_from_directory(history_dir, filename)
+
+@app.route('/gallery')
+def gallery():
+    """Renders a visual web gallery of all uploaded eye scans."""
+    history_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'history')
+    os.makedirs(history_dir, exist_ok=True)
+    images = []
+    for f in os.listdir(history_dir):
+        if f.lower().endswith(('.jpg', '.jpeg', '.png')):
+            fp = os.path.join(history_dir, f)
+            images.append({
+                "name": f,
+                "url": f"/uploads/history/{f}",
+                "size_kb": round(os.path.getsize(fp) / 1024, 1),
+                "time": os.path.getmtime(fp)
+            })
+    images.sort(key=lambda x: x["time"], reverse=True)
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>EyeGuardAI - Uploaded Scans Gallery</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; margin: 0; }}
+            .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 15px; margin-bottom: 25px; }}
+            h1 {{ margin: 0; font-size: 1.5rem; color: #38bdf8; }}
+            .btn {{ background: #2563eb; color: #fff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 0.9rem; }}
+            .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }}
+            .card {{ background: #1e293b; border: 1px solid #334155; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.2); transition: transform 0.2s; }}
+            .card:hover {{ transform: translateY(-4px); border-color: #38bdf8; }}
+            .img-box {{ width: 100%; height: 200px; background: #020617; display: flex; align-items: center; justify-content: center; overflow: hidden; }}
+            .img-box img {{ width: 100%; height: 100%; object-fit: cover; }}
+            .info {{ padding: 12px; font-size: 0.8rem; color: #94a3b8; }}
+            .info strong {{ color: #e2e8f0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 4px; }}
+            .view-btn {{ display: block; text-align: center; background: #0284c7; color: white; padding: 6px; border-radius: 4px; text-decoration: none; font-weight: 600; margin-top: 8px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div>
+                <h1>👁️ EyeGuardAI Uploaded Scans</h1>
+                <p style="margin:4px 0 0 0; color:#64748b; font-size:0.85rem;">Total Scans on Server: <strong>{len(images)}</strong></p>
+            </div>
+            <a href="/" class="btn">← Back to EyeGuardAI</a>
+        </div>
+        <div class="grid">
+    """
+    for img in images:
+        html += f"""
+            <div class="card">
+                <div class="img-box">
+                    <a href="{img['url']}" target="_blank"><img src="{img['url']}" loading="lazy"></a>
+                </div>
+                <div class="info">
+                    <strong>{img['name']}</strong>
+                    <span>Size: {img['size_kb']} KB</span>
+                    <a href="{img['url']}" target="_blank" class="view-btn">View Full Size ↗</a>
+                </div>
+            </div>
+        """
+    html += """
+        </div>
+    </body>
+    </html>
+    """
+    return html
 
 if __name__ == '__main__':
     print("Starting Offline Agentic Swarm Server on http://0.0.0.0:8080...")
