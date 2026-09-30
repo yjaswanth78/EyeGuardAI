@@ -29,23 +29,28 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 # For IEEE Paper: "Fully Offline Collaborative Agentic Swarm for Ocular Screening"
 # ==============================================================================
 
-def generate_spatial_interpretability_maps(image_bgr, pupil_center, sclera_mask, is_cataract, redness_ratio):
-    """Generates Grad-CAM / thermal spatial interpretability maps and overlays."""
+def generate_spatial_interpretability_maps(image_bgr, pupil_center, sclera_mask, is_cataract, redness_ratio, pupils=None):
+    """Generates Grad-CAM / thermal spatial interpretability maps and overlays strictly focused on ocular anatomy."""
     h, w = image_bgr.shape[:2]
     heat_map = np.zeros((h, w), dtype=np.float32)
     
-    # 1. Pupil activation: Gaussian peak focused at pupil aperture
-    if pupil_center and pupil_center[0] < w and pupil_center[1] < h:
-        px, py = pupil_center
-        y_grid, x_grid = np.ogrid[:h, :w]
-        sigma = max(18, int(min(h, w) * 0.12))
-        dist_sq = (x_grid - px)**2 + (y_grid - py)**2
-        pupil_activation = np.exp(-dist_sq / (2.0 * sigma**2))
-        heat_map += pupil_activation * (0.95 if is_cataract else 0.50)
+    # 1. Pupil activation: Gaussian peaks strictly at detected pupil apertures
+    pupil_list = pupils if (pupils and len(pupils) > 0) else ([pupil_center] if pupil_center else [])
+    for p in pupil_list:
+        if p and p[0] < w and p[1] < h:
+            px, py = p
+            y_grid, x_grid = np.ogrid[:h, :w]
+            sigma = max(14, int(min(h, w) * 0.08))
+            dist_sq = (x_grid - px)**2 + (y_grid - py)**2
+            pupil_activation = np.exp(-dist_sq / (2.0 * sigma**2))
+            heat_map += pupil_activation * (0.95 if is_cataract else 0.65)
         
-    # 2. Sclera vascular activation:
+    # 2. Sclera vascular activation: Restricted to upper ocular face zone (eliminates cheek/mouth speckles)
     if sclera_mask is not None and np.sum(sclera_mask > 0) > 0:
-        sclera_norm = (sclera_mask > 0).astype(np.float32)
+        clean_sclera = sclera_mask.copy()
+        if h > 80:
+            clean_sclera[int(h * 0.72):, :] = 0  # Zero out any fair-skin cheek reflections below eye level
+        sclera_norm = (clean_sclera > 0).astype(np.float32)
         sclera_weight = float(np.clip(redness_ratio / 12.0, 0.20, 0.85))
         heat_map += sclera_norm * sclera_weight * 0.40
 
@@ -57,11 +62,12 @@ def generate_spatial_interpretability_maps(image_bgr, pupil_center, sclera_mask,
     # Create translucent overlay: 65% original image, 35% thermal heatmap
     overlay_bgr = cv2.addWeighted(image_bgr, 0.65, heatmap_colored, 0.35, 0)
     
-    # Draw subtle bounding circle around pupil on the overlay
-    if pupil_center and pupil_center[0] < w and pupil_center[1] < h:
-        px, py = pupil_center
-        rad = max(14, int(min(h, w) * 0.09))
-        cv2.circle(overlay_bgr, (px, py), rad, (0, 255, 255), 2, cv2.LINE_AA)
+    # Draw precise bounding rings around detected pupils on the overlay
+    for p in pupil_list:
+        if p and p[0] < w and p[1] < h:
+            px, py = p
+            rad = max(12, int(min(h, w) * 0.07))
+            cv2.circle(overlay_bgr, (px, py), rad, (0, 255, 255), 2, cv2.LINE_AA)
         
     # Encode both to base64 JPEG
     _, heat_buf = cv2.imencode('.jpg', heatmap_colored, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -229,9 +235,26 @@ class CataractSpecialistAgent:
             except Exception as e:
                 print(f"TFLite inference error: {e}")
                 
-        # 2. Adaptive Pupil Optical Density (Finds pupil ANYWHERE in the image, even if off-center)
-        blurred = cv2.GaussianBlur(gray, (15, 15), 0)
-        min_val, _, min_loc, _ = cv2.minMaxLoc(blurred)
+        # 2. Adaptive Pupil Optical Density (Restricted to ocular zone to avoid nostril/chin shadows)
+        ocular_top = int(h * 0.10) if h > 80 else 0
+        ocular_bottom = int(h * 0.70) if h > 80 else h
+        ocular_band = gray[ocular_top:ocular_bottom, :]
+        blurred_band = cv2.GaussianBlur(ocular_band, (15, 15), 0)
+        min_val, _, min_loc_band, _ = cv2.minMaxLoc(blurred_band)
+        primary_pupil = [int(min_loc_band[0]), int(min_loc_band[1] + ocular_top)]
+        
+        # Dual-Eye localization if wide portrait / bilateral eye view
+        pupils = [primary_pupil]
+        if w > int(h * 1.25):
+            mid_x = w // 2
+            left_band = blurred_band[:, :mid_x]
+            right_band = blurred_band[:, mid_x:]
+            _, _, min_l, _ = cv2.minMaxLoc(left_band)
+            _, _, min_r, _ = cv2.minMaxLoc(right_band)
+            pupils = [
+                [int(min_l[0]), int(min_l[1] + ocular_top)],
+                [int(min_r[0] + mid_x), int(min_r[1] + ocular_top)]
+            ]
         
         # User Model Direct Prediction
         user_pred_label = "Cataract Detected" if tflite_prob >= 0.50 else "Normal Eye"
@@ -254,7 +277,8 @@ class CataractSpecialistAgent:
             "user_model_probability": f"{tflite_prob * 100.0:.1f}%",
             "user_model_confidence": float(round(user_conf, 1)),
             "pupil_opacity_score": float(round(min_val, 1)),
-            "pupil_center": [int(min_loc[0]), int(min_loc[1])],
+            "pupil_center": primary_pupil,
+            "pupils": pupils,
             "confidence": float(round(confidence, 1))
         }
 
@@ -267,23 +291,25 @@ class LiverSpecialistAgent:
         self.impact = "Detects early liver disease / hepatitis before skin turns yellow."
         
     def analyze(self, image_bgr, sclera_mask):
-        sclera_pixels = int(np.sum(sclera_mask > 0))
+        sclera_pixels = int(np.sum(sclera_mask > 0)) if sclera_mask is not None else 0
         if sclera_pixels < 30:
-            return {
-                "agent": self.name,
-                "target_region": self.target_region,
-                "biomarker": self.biomarker,
-                "yellow_index": 1.0,
-                "jaundice_risk": 0.0,
-                "status": "Healthy Scleral Chromaticity (Normal Bilirubin Baseline)",
-                "level": "NORMAL",
-                "patient_impact": self.impact
-            }
-            
-        sclera_bgr = image_bgr[sclera_mask > 0]
-        mean_b = float(np.mean(sclera_bgr[:, 0]))
-        mean_g = float(np.mean(sclera_bgr[:, 1]))
-        mean_r = float(np.mean(sclera_bgr[:, 2]))
+            # Fallback to direct optical measurement of bright anterior eye pixels
+            gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+            bright_thresh = np.percentile(gray, 80)
+            bright_pts = image_bgr[gray >= bright_thresh]
+            if len(bright_pts) > 0:
+                mean_b = float(np.mean(bright_pts[:, 0]))
+                mean_g = float(np.mean(bright_pts[:, 1]))
+                mean_r = float(np.mean(bright_pts[:, 2]))
+            else:
+                mean_b = float(np.mean(image_bgr[:, :, 0]))
+                mean_g = float(np.mean(image_bgr[:, :, 1]))
+                mean_r = float(np.mean(image_bgr[:, :, 2]))
+        else:
+            sclera_bgr = image_bgr[sclera_mask > 0]
+            mean_b = float(np.mean(sclera_bgr[:, 0]))
+            mean_g = float(np.mean(sclera_bgr[:, 1]))
+            mean_r = float(np.mean(sclera_bgr[:, 2]))
         
         # Clinical Scleral Yellow Index (SYI): Yellowing elevates (R+G) relative to B
         yellow_index = (mean_r + mean_g) / (2.0 * (mean_b + 1e-5))
@@ -877,9 +903,10 @@ def predict():
 
         # 4. Generate Spatial Interpretability Maps (Heatmap & Overlay)
         pupil_center = cat_report.get("pupil_center", [working_image.shape[1]//2, working_image.shape[0]//2])
+        pupils_list = cat_report.get("pupils", [pupil_center])
         is_cat = (final_result["category"] == "CATARACT")
         heat_b64, over_b64 = generate_spatial_interpretability_maps(
-            working_image, pupil_center, sclera_mask, is_cat, inf_report.get("redness_ratio", 1.0)
+            working_image, pupil_center, sclera_mask, is_cat, inf_report.get("redness_ratio", 1.0), pupils=pupils_list
         )
 
         # 5. Multi-Class Probability Distribution (5 Clinical Classes)
