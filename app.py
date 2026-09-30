@@ -81,6 +81,8 @@ class QualityAndCorrectionAgent:
         h, w, _ = image_bgr.shape
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
         brightness = np.mean(gray)
+        corrections_applied = []
+        corrected_image = image_bgr.copy()
         
         # Invariant Sharpness: Evaluate on normalized scale (max 640px) to prevent multi-megapixel phone cameras from falsely triggering blur
         max_dim = max(h, w)
@@ -327,25 +329,15 @@ class BloodSpecialistAgent:
                 tissue_bgr = None
         elif tissue_px >= 40:
             tissue_bgr = image_bgr[tissue_mask > 0]
-        else:
-            tissue_bgr = None
-            
         if tissue_bgr is None or len(tissue_bgr) == 0:
-            return {
-                "agent": self.name,
-                "target_region": self.target_region,
-                "biomarker": self.biomarker,
-                "erythema_ratio": 1.40,
-                "pallor_score": 0.0,
-                "anemia_risk": 0.0,
-                "status": "Healthy Tissue Perfusion (Normal Hemoglobin Baseline)",
-                "level": "NORMAL",
-                "patient_impact": self.impact
-            }
-            
-        tb = float(np.mean(tissue_bgr[:, 0]))
-        tg = float(np.mean(tissue_bgr[:, 1]))
-        tr = float(np.mean(tissue_bgr[:, 2]))
+            # Fallback to direct optical measurement of available anterior eye pixels
+            tb = float(np.mean(image_bgr[:, :, 0]))
+            tg = float(np.mean(image_bgr[:, :, 1]))
+            tr = float(np.mean(image_bgr[:, :, 2]))
+        else:
+            tb = float(np.mean(tissue_bgr[:, 0]))
+            tg = float(np.mean(tissue_bgr[:, 1]))
+            tr = float(np.mean(tissue_bgr[:, 2]))
         
         # Clinical Erythema Ratio: Red relative to Green + Blue
         erythema_ratio = tr / ((tg + tb) / 2.0 + 1e-5)
@@ -943,7 +935,7 @@ def predict():
                 "sharpness": round(q_report.get("original_sharpness", 0.0), 1),
                 "pupil_opacity": cat_report.get("pupil_opacity_score", 0.0),
                 "sclera_redness": f"{inf_report.get('redness_ratio', 0.0):.2f}%",
-                "erythema_ratio": blood_report.get("erythema_ratio", 1.45)
+                "erythema_ratio": float(round(blood_report.get("erythema_ratio", 0.0), 2))
             },
             "quality": {
                 "quality_label": "Approved by QC Agent",
